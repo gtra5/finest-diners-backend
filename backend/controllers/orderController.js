@@ -40,17 +40,22 @@ const createOrder = async (req, res) => {
       notes: String(notes || '').slice(0, 500),
     };
 
-    // Add coordinates if provided
+    // Add coordinates if provided and valid
     if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
-      orderData.latitude = parseFloat(latitude);
-      orderData.longitude = parseFloat(longitude);
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        orderData.latitude = lat;
+        orderData.longitude = lng;
+      }
     }
 
     const order = await Order.create(orderData);
 
     res.status(201).json(order);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Order creation error:', error);
+    res.status(500).json({ message: error.message || 'Failed to create order' });
   }
 };
 

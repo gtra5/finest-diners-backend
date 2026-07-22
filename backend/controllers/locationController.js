@@ -7,6 +7,7 @@ const User = require('../models/User');
  */
 const updateLocation = async (req, res) => {
   try {
+    console.log('updateLocation called with user:', req.user?._id);
     const { latitude, longitude } = req.body;
 
     // Validate that latitude and longitude are provided
@@ -59,6 +60,7 @@ const updateLocation = async (req, res) => {
       locationUpdatedAt: user.locationUpdatedAt,
     });
   } catch (error) {
+    console.error('Location update error:', error);
     res.status(500).json({ message: error.message });
   }
 };
