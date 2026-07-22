@@ -34,6 +34,22 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    latitude: {
+      type: Number,
+      default: null,
+      min: -90,
+      max: 90,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+      min: -180,
+      max: 180,
+    },
+    locationUpdatedAt: {
+      type: Date,
+      default: null,
+    },
   },
   { timestamps: true }
 );

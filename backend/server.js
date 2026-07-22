@@ -45,12 +45,14 @@ const foodRoutes        = require('./routes/foodRoutes');
 const orderRoutes       = require('./routes/orderRoutes');
 const restaurantRoutes  = require('./routes/restaurantRoutes');
 const paymentRoutes     = require('./routes/paymentRoutes');
+const locationRoutes    = require('./routes/locationRoutes');
 
 app.use('/api/auth',        authRoutes);
 app.use('/api/food',        foodRoutes);
 app.use('/api/orders',      orderRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/payments',    paymentRoutes);
+app.use('/api/location',    locationRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
