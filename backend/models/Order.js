@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 const orderItemSchema = new mongoose.Schema({
   food: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Food',
+    type: String,
     required: true,
   },
   name: { type: String, required: true },
