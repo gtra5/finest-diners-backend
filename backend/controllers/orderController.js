@@ -5,7 +5,7 @@ const Order = require('../models/Order');
 // @access  Private (customer)
 const createOrder = async (req, res) => {
   try {
-    const { restaurant, items, deliveryAddress, paymentMethod, notes } = req.body;
+    const { restaurant, items, deliveryAddress, paymentMethod, notes, latitude, longitude } = req.body;
 
     if (!restaurant) {
       return res.status(400).json({ message: 'Restaurant is required' });
@@ -30,7 +30,7 @@ const createOrder = async (req, res) => {
       (sum, item) => sum + item.price * item.quantity, 0
     );
 
-    const order = await Order.create({
+    const orderData = {
       customer: req.user._id,
       restaurant,
       items: sanitisedItems,
@@ -38,7 +38,15 @@ const createOrder = async (req, res) => {
       totalPrice: parseFloat(totalPrice.toFixed(2)),
       paymentMethod,
       notes: String(notes || '').slice(0, 500),
-    });
+    };
+
+    // Add coordinates if provided
+    if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
+      orderData.latitude = parseFloat(latitude);
+      orderData.longitude = parseFloat(longitude);
+    }
+
+    const order = await Order.create(orderData);
 
     res.status(201).json(order);
   } catch (error) {
