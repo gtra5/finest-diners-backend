@@ -1,0 +1,123 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Space+Grotesk:wght@300;400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Modak&display=swap");
+@import "tailwindcss";
+.hero-title {
+  font-family: "Space Grotesk", sans-serif;
+}
+.scan-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+}
+.card-hover {
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
+}
+.card-hover:hover {
+  border-color: #a3e635;
+  transform: translateY(-2px);
+}
+.btn-primary {
+  background: #a3e635;
+  color: #000;
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+  padding: 10px 20px;
+  transition:
+    background 0.2s,
+    transform 0.15s;
+}
+.btn-primary:hover {
+  background: #bef264;
+  transform: scale(1.02);
+}
+.btn-outline {
+  border: 1px solid #555;
+  color: #ccc;
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  padding: 10px 20px;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
+}
+.btn-outline:hover {
+  border-color: #a3e635;
+  color: #a3e635;
+}
+.section-label {
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #a3e635;
+}
+.ticker {
+  animation: ticker 12s linear infinite;
+}
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.float-img {
+  animation: floatImg 6s ease-in-out infinite;
+}
+@keyframes floatImg {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-12px) rotate(2deg);
+  }
+}
+.glow-dot {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+@keyframes glowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 4px currentColor;
+  }
+  50% {
+    box-shadow: 0 0 10px currentColor;
+  }
+}
+/* globals.css */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+@layer utilities {
+  @keyframes review-scroll {
+    0% {
+      transform: translateX(0);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-review-scroll {
+    animation: review-scroll 30s linear infinite;
+  }
+}
