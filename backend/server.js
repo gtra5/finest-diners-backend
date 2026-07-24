@@ -23,7 +23,11 @@ const app = express();
 // express.json() MUST be registered before any routes so req.body is populated
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:5173'];
+  : [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://finest-diners-2-1.onrender.com',
+    ];
 
 app.use(
   cors({
@@ -33,6 +37,8 @@ app.use(
       callback(new Error(`CORS: origin ${origin} not allowed`));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 app.use(express.json());
