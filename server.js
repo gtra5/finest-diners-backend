@@ -1,7 +1,10 @@
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const cors = require("cors");
 require("dotenv").config();
 const connectDB = require("./config/db");
+const attachOrderTracking = require("./sockets/Ordertracking");
 
 // ─── Startup secret validation ────────────────────────────────────────────────
 // Fail fast — don't start the server with missing critical config
@@ -38,22 +41,21 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       "https://finest-diners-2-622i.vercel.app",
     ];
 
+const corsOriginCheck = (origin, callback) => {
+  // Allow requests with no origin (mobile apps, curl, Postman)
+  if (!origin) return callback(null, true);
+
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (allowedOrigins.includes(normalizedOrigin) || isVercelPreviewOrigin(normalizedOrigin)) {
+    return callback(null, true);
+  }
+
+  callback(new Error(`CORS: origin ${origin} not allowed`));
+};
+
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl, Postman)
-      if (!origin) return callback(null, true);
-
-      const normalizedOrigin = normalizeOrigin(origin);
-      if (
-        allowedOrigins.includes(normalizedOrigin) ||
-        isVercelPreviewOrigin(normalizedOrigin)
-      ) {
-        return callback(null, true);
-      }
-
-      callback(new Error(`CORS: origin ${origin} not allowed`));
-    },
+    origin: corsOriginCheck,
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -62,6 +64,17 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// ─── HTTP server + Socket.IO (live order tracking) ────────────────────────────
+// Socket.IO needs the raw http.Server, not the Express app, so requests can
+// be upgraded to WebSocket connections. Express keeps handling all normal
+// HTTP routes exactly as before via the same `app`.
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: corsOriginCheck, credentials: true },
+});
+app.set("io", io); // lets controllers (e.g. orderController) emit events
+attachOrderTracking(io);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 // Imported after middleware so the router chain is fully built before mounting
@@ -109,8 +122,9 @@ const PORT = process.env.PORT || 5000;
 
 connectDB()
   .then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`📡 Live order tracking ready via Socket.IO`);
     });
   })
   .catch((err) => {

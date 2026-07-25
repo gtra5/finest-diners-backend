@@ -45,6 +45,12 @@ const orderSchema = new mongoose.Schema(
       min: -180,
       max: 180,
     },
+    // Set on every live location:update while the order is active — lets
+    // a driver's screen show "last updated Xs ago" and flag stale data.
+    locationUpdatedAt: {
+      type: Date,
+      default: null,
+    },
     totalPrice: {
       type: Number,
       required: true,
@@ -55,8 +61,11 @@ const orderSchema = new mongoose.Schema(
       default: 'pending',
     },
     paymentMethod: {
+      // Was ['card', 'cash'] — didn't match the ids Checkout.jsx actually
+      // sends ('card' | 'applepay' | 'cod'), so 'applepay' and 'cod' orders
+      // were failing schema validation on save.
       type: String,
-      enum: ['card', 'cash'],
+      enum: ['card', 'applepay', 'cod'],
       default: 'card',
     },
     isPaid: {

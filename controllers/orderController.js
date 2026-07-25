@@ -117,6 +117,18 @@ const updateOrderStatus = async (req, res) => {
     if (status === 'delivered') order.isPaid = true;
     await order.save();
 
+    // Live tracking only makes sense while an order is active — once it's
+    // delivered or cancelled, tell anyone still in the room to stop, and
+    // evict them so a stray reconnect can't rejoin.
+    if (status === 'delivered' || status === 'cancelled') {
+      const io = req.app.get('io');
+      if (io) {
+        const room = `order:${order._id}`;
+        io.to(room).emit('tracking:ended', { orderId: order._id.toString(), status });
+        io.in(room).socketsLeave(room);
+      }
+    }
+
     res.json(order);
   } catch (error) {
     res.status(500).json({ message: error.message });
