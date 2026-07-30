@@ -7,7 +7,6 @@ const connectDB = require("./config/db");
 const attachOrderTracking = require("./sockets/Ordertracking");
 
 // ─── Startup secret validation ────────────────────────────────────────────────
-// Fail fast — don't start the server with missing critical config
 const REQUIRED_ENV = ["MONGO_URI", "JWT_SECRET", "ALLOWED_ORIGINS"];
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 if (missing.length > 0) {
@@ -27,10 +26,8 @@ if (process.env.JWT_SECRET.length < 32) {
 const app = express();
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-// express.json() MUST be registered before any routes so req.body is populated
 const normalizeOrigin = (origin) => origin.replace(/\/$/, "");
-const isVercelPreviewOrigin = (origin) =>
-  /\.vercel\.app$/i.test(origin);
+const isVercelPreviewOrigin = (origin) => /\.vercel\.app$/i.test(origin);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => normalizeOrigin(o.trim()))
@@ -42,7 +39,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
     ];
 
 const corsOriginCheck = (origin, callback) => {
-  // Allow requests with no origin (mobile apps, curl, Postman)
+  // Allow non-browser requests (mobile apps, Postman, curl)
   if (!origin) return callback(null, true);
 
   const normalizedOrigin = normalizeOrigin(origin);
@@ -50,7 +47,8 @@ const corsOriginCheck = (origin, callback) => {
     return callback(null, true);
   }
 
-  callback(new Error(`CORS: origin ${origin} not allowed`));
+  // Reject origin cleanly without throwing a 500 error
+  return callback(null, false);
 };
 
 app.use(
@@ -62,22 +60,19 @@ app.use(
     optionsSuccessStatus: 200,
   }),
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// ─── HTTP server + Socket.IO (live order tracking) ────────────────────────────
-// Socket.IO needs the raw http.Server, not the Express app, so requests can
-// be upgraded to WebSocket connections. Express keeps handling all normal
-// HTTP routes exactly as before via the same `app`.
+// ─── HTTP server + Socket.IO ──────────────────────────────────────────────────
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: corsOriginCheck, credentials: true },
 });
-app.set("io", io); // lets controllers (e.g. orderController) emit events
+app.set("io", io);
 attachOrderTracking(io);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
-// Imported after middleware so the router chain is fully built before mounting
 const authRoutes = require("./routes/authRoutes");
 const foodRoutes = require("./routes/foodRoutes");
 const orderRoutes = require("./routes/orderRoutes");
@@ -106,18 +101,14 @@ app.use((_req, res) => {
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 // eslint-disable-next-line no-unused-vars
-app.use((err, _req, res, _next) => {
-  // Log full error server-side only — never send stack traces to the client
+app.use((err, req, res, _next) => {
   console.error("Unhandled error:", err);
 
-  // Set CORS headers on error responses to prevent browser blocking
-  const origin = _req.headers.origin;
+  // Always reflect origin on errors so the browser can display error messages
+  const origin = req.headers.origin;
   if (origin) {
-    const normalizedOrigin = normalizeOrigin(origin);
-    if (allowedOrigins.includes(normalizedOrigin) || isVercelPreviewOrigin(normalizedOrigin)) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-    }
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   }
 
   res.status(err.status || 500).json({
