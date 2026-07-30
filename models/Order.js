@@ -66,6 +66,14 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
   },
   { timestamps: true }
 );
