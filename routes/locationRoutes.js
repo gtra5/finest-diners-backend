@@ -1,14 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const {
-  updateLocation,
-  getLocation,
-} = require('../controllers/locationController');
-const { protect, authorize } = require('../middleware/authMiddleware');
+const { getLocationByIP } = require('../controllers/locationController');
 
-router.use(protect); // All location routes require authentication
-
-router.post('/', authorize('customer', 'driver'), updateLocation);
-router.get('/', getLocation);
+// Get location based on client IP
+router.get('/', getLocationByIP);
 
 module.exports = router;

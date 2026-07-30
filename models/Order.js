@@ -33,24 +33,6 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    latitude: {
-      type: Number,
-      default: null,
-      min: -90,
-      max: 90,
-    },
-    longitude: {
-      type: Number,
-      default: null,
-      min: -180,
-      max: 180,
-    },
-    // Set on every live location:update while the order is active — lets
-    // a driver's screen show "last updated Xs ago" and flag stale data.
-    locationUpdatedAt: {
-      type: Date,
-      default: null,
-    },
     totalPrice: {
       type: Number,
       required: true,

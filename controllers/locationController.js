@@ -1,100 +1,79 @@
-const User = require('../models/User');
+const axios = require('axios');
 
 /**
- * @desc    Update user's current location
- * @route   POST /api/location
- * @access  Private (customer, driver)
- */
-const updateLocation = async (req, res) => {
-  try {
-    console.log('updateLocation called with user:', req.user?._id);
-    const { latitude, longitude } = req.body;
-
-    // Validate that latitude and longitude are provided
-    if (latitude === undefined || longitude === undefined) {
-      return res.status(400).json({ 
-        message: 'Latitude and longitude are required' 
-      });
-    }
-
-    // Validate coordinate types
-    const lat = parseFloat(latitude);
-    const lng = parseFloat(longitude);
-
-    if (isNaN(lat) || isNaN(lng)) {
-      return res.status(400).json({ 
-        message: 'Latitude and longitude must be valid numbers' 
-      });
-    }
-
-    // Validate latitude range (-90 to 90)
-    if (lat < -90 || lat > 90) {
-      return res.status(400).json({ 
-        message: 'Latitude must be between -90 and 90 degrees' 
-      });
-    }
-
-    // Validate longitude range (-180 to 180)
-    if (lng < -180 || lng > 180) {
-      return res.status(400).json({ 
-        message: 'Longitude must be between -180 and 180 degrees' 
-      });
-    }
-
-    // Update user's location
-    const user = await User.findById(req.user._id);
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    user.latitude = lat;
-    user.longitude = lng;
-    user.locationUpdatedAt = new Date();
-    await user.save();
-
-    res.json({
-      message: 'Location updated successfully',
-      latitude: user.latitude,
-      longitude: user.longitude,
-      locationUpdatedAt: user.locationUpdatedAt,
-    });
-  } catch (error) {
-    console.error('Location update error:', error);
-    res.status(500).json({ message: error.message });
-  }
-};
-
-/**
- * @desc    Get user's current location
+ * @desc    Get client location based on IP address using ipapi.co
  * @route   GET /api/location
- * @access  Private
+ * @access  Public
  */
-const getLocation = async (req, res) => {
+const getLocationByIP = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('latitude longitude locationUpdatedAt');
+    // Get client IP from request, handling proxy headers
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded 
+      ? forwarded.split(',')[0].trim() 
+      : req.socket.remoteAddress || req.connection.remoteAddress;
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    // Handle localhost/IPv6 loopback for testing
+    const clientIP = (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1')
+      ? null // ipapi.co will use the server's IP if null
+      : ip;
 
-    if (user.latitude === null || user.longitude === null) {
-      return res.status(404).json({ 
-        message: 'No location data available for this user' 
+    // Call ipapi.co API with custom User-Agent header
+    const apiUrl = clientIP 
+      ? `https://ipapi.co/${clientIP}/json/`
+      : 'https://ipapi.co/json/';
+
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'User-Agent': 'Finest-Diners/1.0',
+      },
+      timeout: 5000, // 5 second timeout
+    });
+
+    const data = response.data;
+
+    // Check for API errors
+    if (data.error) {
+      return res.status(400).json({
+        message: `Location API error: ${data.reason || 'Unknown error'}`,
       });
     }
 
+    // Return relevant location data
     res.json({
-      latitude: user.latitude,
-      longitude: user.longitude,
-      locationUpdatedAt: user.locationUpdatedAt,
+      ip: data.ip,
+      city: data.city,
+      region: data.region,
+      country: data.country_name,
+      country_code: data.country_code,
+      continent: data.continent_code,
+      currency: data.currency,
+      timezone: data.timezone,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      postal: data.postal,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Location API error:', error.message);
+    
+    if (error.code === 'ECONNABORTED') {
+      return res.status(504).json({
+        message: 'Location service timeout. Please try again.',
+      });
+    }
+
+    if (error.response) {
+      return res.status(error.response.status).json({
+        message: `Location service error: ${error.response.statusText}`,
+      });
+    }
+
+    res.status(500).json({
+      message: 'Failed to fetch location data',
+    });
   }
 };
 
 module.exports = {
-  updateLocation,
-  getLocation,
+  getLocationByIP,
 };
