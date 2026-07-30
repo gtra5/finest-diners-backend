@@ -1,5 +1,6 @@
 const Food = require('../models/Food');
 const Restaurant = require('../models/Restaurant');
+const mongoose = require('mongoose');
 const { fetchMenuItems, getRecipeById } = require('../services/spoonacularService');
 
 // How many hours before we consider the cache stale and try to refresh
@@ -19,6 +20,11 @@ const isCacheStale = (cachedAt) => {
 // @access  Public
 const getMenuByRestaurant = async (req, res) => {
   try {
+    // Validate restaurant ID format before any database calls
+    if (!mongoose.Types.ObjectId.isValid(req.params.restaurantId)) {
+      return res.status(400).json({ success: false, message: 'Invalid restaurant ID format' });
+    }
+
     const restaurant = await Restaurant.findById(req.params.restaurantId);
     if (!restaurant) {
       return res.status(404).json({ message: 'Restaurant not found' });

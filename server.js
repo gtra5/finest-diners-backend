@@ -30,7 +30,7 @@ const app = express();
 // express.json() MUST be registered before any routes so req.body is populated
 const normalizeOrigin = (origin) => origin.replace(/\/$/, "");
 const isVercelPreviewOrigin = (origin) =>
-  /^https:\/\/[A-Za-z0-9-]+(?:--[A-Za-z0-9-]+)*\.vercel\.app$/i.test(origin);
+  /\.vercel\.app$/i.test(origin);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => normalizeOrigin(o.trim()))
@@ -109,6 +109,17 @@ app.use((_req, res) => {
 app.use((err, _req, res, _next) => {
   // Log full error server-side only — never send stack traces to the client
   console.error("Unhandled error:", err);
+
+  // Set CORS headers on error responses to prevent browser blocking
+  const origin = _req.headers.origin;
+  if (origin) {
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (allowedOrigins.includes(normalizedOrigin) || isVercelPreviewOrigin(normalizedOrigin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+  }
+
   res.status(err.status || 500).json({
     message:
       process.env.NODE_ENV === "production"
