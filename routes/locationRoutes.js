@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { getLocationByIP } = require('../controllers/locationController');
+const { getAddressFromCoords } = require('../controllers/locationController');
 
-// Get location based on client IP
-router.get('/', getLocationByIP);
+// Reverse-geocode GPS coordinates (from the browser) into a readable address
+router.get('/reverse', getAddressFromCoords);
 
 module.exports = router;

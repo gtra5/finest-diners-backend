@@ -1,61 +1,73 @@
 const axios = require('axios');
 
+const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
+
 /**
- * @desc    Get client location based on IP address using ipapi.co
- * @route   GET /api/location
+ * @desc    Turn GPS coordinates (from the browser's Geolocation API) into a
+ *          readable address. Replaces the old IP-based lookup — IP geolocation
+ *          is frequently wrong by tens of kilometres, especially outside the
+ *          US/EU, so we rely on the device's actual GPS reading instead.
+ * @route   GET /api/location/reverse?lat=..&lng=..
  * @access  Public
  */
-const getLocationByIP = async (req, res) => {
+const getAddressFromCoords = async (req, res) => {
   try {
-    // Get client IP from request, handling proxy headers
-    const forwarded = req.headers['x-forwarded-for'];
-    const ip = forwarded 
-      ? forwarded.split(',')[0].trim() 
-      : req.socket.remoteAddress || req.connection.remoteAddress;
+    const { lat, lng } = req.query;
 
-    // Handle localhost/IPv6 loopback for testing
-    const clientIP = (ip === '::1' || ip === '127.0.0.1' || ip === '::ffff:127.0.0.1')
-      ? null // ipapi.co will use the server's IP if null
-      : ip;
-
-    // Call ipapi.co API with custom User-Agent header
-    const apiUrl = clientIP 
-      ? `https://ipapi.co/${clientIP}/json/`
-      : 'https://ipapi.co/json/';
-
-    const response = await axios.get(apiUrl, {
-      headers: {
-        'User-Agent': 'Finest-Diners/1.0',
-      },
-      timeout: 5000, // 5 second timeout
-    });
-
-    const data = response.data;
-
-    // Check for API errors
-    if (data.error) {
+    if (!lat || !lng) {
       return res.status(400).json({
-        message: `Location API error: ${data.reason || 'Unknown error'}`,
+        message: 'lat and lng query parameters are required',
       });
     }
 
-    // Return relevant location data
+    const latitude = Number(lat);
+    const longitude = Number(lng);
+
+    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
+      return res.status(400).json({ message: 'lat and lng must be valid numbers' });
+    }
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return res.status(400).json({ message: 'lat/lng is out of range' });
+    }
+
+    if (!OPENCAGE_KEY) {
+      console.error('OPENCAGE_API_KEY is not set');
+      return res.status(500).json({ message: 'Location service is not configured' });
+    }
+
+    const response = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
+      params: {
+        q: `${latitude}+${longitude}`,
+        key: OPENCAGE_KEY,
+        no_annotations: 1,
+        language: 'en',
+      },
+      timeout: 5000, // 5 second timeout, same as before
+    });
+
+    const result = response.data?.results?.[0];
+
+    if (!result) {
+      return res.status(404).json({ message: 'No address found for these coordinates' });
+    }
+
+    const c = result.components || {};
+
     res.json({
-      ip: data.ip,
-      city: data.city,
-      region: data.region,
-      country: data.country_name,
-      country_code: data.country_code,
-      continent: data.continent_code,
-      currency: data.currency,
-      timezone: data.timezone,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      postal: data.postal,
+      formattedAddress: result.formatted,
+      street: [c.road, c.house_number].filter(Boolean).join(' ') || null,
+      neighbourhood: c.neighbourhood || c.suburb || c.quarter || null,
+      city: c.city || c.town || c.village || null,
+      state: c.state || null,
+      country: c.country || null,
+      postal: c.postcode || null,
+      latitude,
+      longitude,
     });
   } catch (error) {
-    console.error('Location API error:', error.message);
-    
+    console.error('Reverse geocoding error:', error.message);
+
     if (error.code === 'ECONNABORTED') {
       return res.status(504).json({
         message: 'Location service timeout. Please try again.',
@@ -69,11 +81,11 @@ const getLocationByIP = async (req, res) => {
     }
 
     res.status(500).json({
-      message: 'Failed to fetch location data',
+      message: 'Failed to fetch address for this location',
     });
   }
 };
 
 module.exports = {
-  getLocationByIP,
+  getAddressFromCoords,
 };

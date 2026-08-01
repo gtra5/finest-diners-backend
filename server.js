@@ -7,7 +7,7 @@ const connectDB = require("./config/db");
 const attachOrderTracking = require("./sockets/Ordertracking");
 
 // ─── Startup secret validation ────────────────────────────────────────────────
-const REQUIRED_ENV = ["MONGO_URI", "JWT_SECRET", "ALLOWED_ORIGINS"];
+const REQUIRED_ENV = ["MONGO_URI", "JWT_SECRET", "ALLOWED_ORIGINS", "OPENCAGE_API_KEY"];
 const missing = REQUIRED_ENV.filter((key) => !process.env[key]);
 if (missing.length > 0) {
   console.error(
