@@ -13,11 +13,17 @@ const protect = async (req, res, next) => {
       // Attach user without password
       req.user = await User.findById(decoded.id).select('-password');
       if (!req.user) {
-        return res.status(401).json({ message: 'User not found' });
+        return res.status(401).json({ message: 'Not authorized, user not found' });
       }
 
       return next();
-    } catch {
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ message: 'Not authorized, invalid token' });
+      }
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ message: 'Not authorized, token expired' });
+      }
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
@@ -28,6 +34,9 @@ const protect = async (req, res, next) => {
 // Role-based access control — pass one or more allowed roles
 const authorize = (...roles) => {
   return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
     if (!roles.includes(req.user.role)) {
       return res.status(403).json({
         message: `Role '${req.user.role}' is not authorized to access this route`,

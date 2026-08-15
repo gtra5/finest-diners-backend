@@ -1,63 +1,95 @@
 const Order = require('../models/Order');
+const { body, validationResult } = require('express-validator');
 
 // @desc    Place a new order
 // @route   POST /api/orders
 // @access  Private (customer)
-const createOrder = async (req, res) => {
-  try {
-    const { restaurant, items, deliveryAddress, paymentMethod, notes, latitude, longitude } = req.body;
+const createOrder = [
+  // Validation
+  body('restaurant')
+    .notEmpty()
+    .withMessage('Restaurant is required'),
+  body('deliveryAddress')
+    .trim()
+    .notEmpty()
+    .withMessage('Delivery address is required'),
+  body('items')
+    .isArray({ min: 1 })
+    .withMessage('At least one item is required'),
+  body('items.*.food')
+    .notEmpty()
+    .withMessage('Item food ID is required'),
+  body('items.*.name')
+    .trim()
+    .notEmpty()
+    .withMessage('Item name is required'),
+  body('items.*.price')
+    .isFloat({ min: 0 })
+    .withMessage('Item price must be a positive number'),
+  body('items.*.quantity')
+    .isInt({ min: 1 })
+    .withMessage('Item quantity must be at least 1'),
+  body('paymentMethod')
+    .optional()
+    .isIn(['card', 'cash'])
+    .withMessage('Invalid payment method'),
+  body('notes')
+    .optional()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage('Notes must be less than 500 characters'),
 
-    if (!restaurant) {
-      return res.status(400).json({ message: 'Restaurant is required' });
-    }
-    if (!deliveryAddress || !deliveryAddress.trim()) {
-      return res.status(400).json({ message: 'Delivery address is required' });
-    }
-    if (!items || items.length === 0) {
-      return res.status(400).json({ message: 'No items in order' });
-    }
-
-    // Whitelist item fields — never trust arbitrary client data
-    const sanitisedItems = items.map((item) => ({
-      food:     item.food,
-      name:     String(item.name || '').slice(0, 120),
-      price:    Math.abs(parseFloat(item.price) || 0),
-      quantity: Math.max(1, parseInt(item.quantity, 10) || 1),
-      imageUrl: String(item.imageUrl || '').slice(0, 500),
-    }));
-
-    const totalPrice = sanitisedItems.reduce(
-      (sum, item) => sum + item.price * item.quantity, 0
-    );
-
-    const orderData = {
-      customer: req.user._id,
-      restaurant,
-      items: sanitisedItems,
-      deliveryAddress: deliveryAddress.trim(),
-      totalPrice: parseFloat(totalPrice.toFixed(2)),
-      paymentMethod,
-      notes: String(notes || '').slice(0, 500),
-    };
-
-    // Add coordinates if provided and valid
-    if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
-      const lat = parseFloat(latitude);
-      const lng = parseFloat(longitude);
-      if (!isNaN(lat) && !isNaN(lng)) {
-        orderData.latitude = lat;
-        orderData.longitude = lng;
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg });
       }
+
+      const { restaurant, items, deliveryAddress, paymentMethod, notes, latitude, longitude } = req.body;
+
+      // Whitelist item fields — never trust arbitrary client data
+      const sanitisedItems = items.map((item) => ({
+        food:     item.food,
+        name:     String(item.name || '').slice(0, 120),
+        price:    Math.abs(parseFloat(item.price) || 0),
+        quantity: Math.max(1, parseInt(item.quantity, 10) || 1),
+        imageUrl: String(item.imageUrl || '').slice(0, 500),
+      }));
+
+      const totalPrice = sanitisedItems.reduce(
+        (sum, item) => sum + item.price * item.quantity, 0
+      );
+
+      const orderData = {
+        customer: req.user._id,
+        restaurant,
+        items: sanitisedItems,
+        deliveryAddress: deliveryAddress.trim(),
+        totalPrice: parseFloat(totalPrice.toFixed(2)),
+        paymentMethod,
+        notes: String(notes || '').slice(0, 500),
+      };
+
+      // Add coordinates if provided and valid
+      if (latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null) {
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          orderData.latitude = lat;
+          orderData.longitude = lng;
+        }
+      }
+
+      const order = await Order.create(orderData);
+
+      res.status(201).json(order);
+    } catch (error) {
+      console.error('Order creation error:', error);
+      res.status(500).json({ message: error.message || 'Failed to create order' });
     }
-
-    const order = await Order.create(orderData);
-
-    res.status(201).json(order);
-  } catch (error) {
-    console.error('Order creation error:', error);
-    res.status(500).json({ message: error.message || 'Failed to create order' });
   }
-};
+];
 
 // @desc    Get all orders for the logged-in customer
 // @route   GET /api/orders/my

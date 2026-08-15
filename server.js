@@ -2,6 +2,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const mongoSanitize = require("express-mongo-sanitize");
 require("dotenv").config();
 const connectDB = require("./config/db");
 const attachOrderTracking = require("./sockets/Ordertracking");
@@ -61,8 +64,31 @@ app.use(
   }),
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for API-only server
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Disable X-Powered-By header
+app.disable('x-powered-by');
+
+// NoSQL injection protection
+app.use(mongoSanitize());
+
+// Body size limit
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+
+// Global rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', limiter);
 
 // ─── HTTP server + Socket.IO ──────────────────────────────────────────────────
 const server = http.createServer(app);
@@ -129,6 +155,7 @@ connectDB()
       console.log(`📡 Live order tracking ready via Socket.IO`);
     });
   })
+  
   .catch((err) => {
     console.error(
       "❌ Failed to connect to database. Server not started.",

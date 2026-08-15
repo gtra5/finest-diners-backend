@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { query, validationResult } = require('express-validator');
 
 const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
 
@@ -10,81 +11,89 @@ const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
  * @route   GET /api/location/reverse?lat=..&lng=..
  * @access  Public
  */
-const getAddressFromCoords = async (req, res) => {
-  try {
-    const { lat, lng } = req.query;
+const getAddressFromCoords = [
+  // Validation
+  query('lat')
+    .notEmpty()
+    .withMessage('Latitude is required')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('Latitude must be between -90 and 90'),
+  query('lng')
+    .notEmpty()
+    .withMessage('Longitude is required')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('Longitude must be between -180 and 180'),
 
-    if (!lat || !lng) {
-      return res.status(400).json({
-        message: 'lat and lng query parameters are required',
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg });
+      }
+
+      const { lat, lng } = req.query;
+
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+
+      if (!OPENCAGE_KEY) {
+        console.error('OPENCAGE_API_KEY is not set');
+        return res.status(500).json({ message: 'Location service is not configured' });
+      }
+
+      const response = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
+        params: {
+          q: `${latitude}+${longitude}`,
+          key: OPENCAGE_KEY,
+          no_annotations: 1,
+          language: 'en',
+        },
+        timeout: 5000, // 5 second timeout
+      });
+
+      const result = response.data?.results?.[0];
+
+      if (!result) {
+        return res.status(404).json({ message: 'No address found for these coordinates' });
+      }
+
+      const c = result.components || {};
+
+      // Sanitize response data to prevent XSS
+      const sanitizeString = (str) => str ? String(str).replace(/[<>]/g, '') : null;
+
+      res.json({
+        formattedAddress: sanitizeString(result.formatted),
+        street: sanitizeString([c.road, c.house_number].filter(Boolean).join(' ')),
+        neighbourhood: sanitizeString(c.neighbourhood || c.suburb || c.quarter),
+        city: sanitizeString(c.city || c.town || c.village),
+        state: sanitizeString(c.state),
+        country: sanitizeString(c.country),
+        postal: sanitizeString(c.postcode),
+        latitude,
+        longitude,
+      });
+    } catch (error) {
+      console.error('Reverse geocoding error:', error.message);
+
+      if (error.code === 'ECONNABORTED') {
+        return res.status(504).json({
+          message: 'Location service timeout. Please try again.',
+        });
+      }
+
+      if (error.response) {
+        return res.status(error.response.status).json({
+          message: `Location service error: ${error.response.statusText}`,
+        });
+      }
+
+      res.status(500).json({
+        message: 'Failed to fetch address for this location',
       });
     }
-
-    const latitude = Number(lat);
-    const longitude = Number(lng);
-
-    if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
-      return res.status(400).json({ message: 'lat and lng must be valid numbers' });
-    }
-
-    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-      return res.status(400).json({ message: 'lat/lng is out of range' });
-    }
-
-    if (!OPENCAGE_KEY) {
-      console.error('OPENCAGE_API_KEY is not set');
-      return res.status(500).json({ message: 'Location service is not configured' });
-    }
-
-    const response = await axios.get('https://api.opencagedata.com/geocode/v1/json', {
-      params: {
-        q: `${latitude}+${longitude}`,
-        key: OPENCAGE_KEY,
-        no_annotations: 1,
-        language: 'en',
-      },
-      timeout: 5000, // 5 second timeout, same as before
-    });
-
-    const result = response.data?.results?.[0];
-
-    if (!result) {
-      return res.status(404).json({ message: 'No address found for these coordinates' });
-    }
-
-    const c = result.components || {};
-
-    res.json({
-      formattedAddress: result.formatted,
-      street: [c.road, c.house_number].filter(Boolean).join(' ') || null,
-      neighbourhood: c.neighbourhood || c.suburb || c.quarter || null,
-      city: c.city || c.town || c.village || null,
-      state: c.state || null,
-      country: c.country || null,
-      postal: c.postcode || null,
-      latitude,
-      longitude,
-    });
-  } catch (error) {
-    console.error('Reverse geocoding error:', error.message);
-
-    if (error.code === 'ECONNABORTED') {
-      return res.status(504).json({
-        message: 'Location service timeout. Please try again.',
-      });
-    }
-
-    if (error.response) {
-      return res.status(error.response.status).json({
-        message: `Location service error: ${error.response.statusText}`,
-      });
-    }
-
-    res.status(500).json({
-      message: 'Failed to fetch address for this location',
-    });
   }
-};
+];
 
 module.exports = {
   getAddressFromCoords,
