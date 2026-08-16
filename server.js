@@ -4,7 +4,7 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const mongoSanitize = require("express-mongo-sanitize");
+const { sanitize } = require("express-mongo-sanitize");
 require("dotenv").config();
 const connectDB = require("./config/db");
 const attachOrderTracking = require("./sockets/Ordertracking");
@@ -73,12 +73,41 @@ app.use(helmet({
 // Disable X-Powered-By header
 app.disable('x-powered-by');
 
-// NoSQL injection protection
-app.use(mongoSanitize());
-
 // Body size limit
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+
+// NoSQL injection protection.
+// We can't use express-mongo-sanitize's default middleware here: it reassigns
+// `req.query`, which throws on Express 5 because `req.query` is a getter-only
+// accessor ("Cannot set property query of #<IncomingMessage>..."). Its
+// `sanitize()` helper mutates objects in place, so we call that directly.
+// Placed after body parsing so POST bodies are actually sanitized.
+app.use((req, _res, next) => {
+  // body / params / headers are mutable own objects — sanitize in place.
+  ['body', 'params', 'headers'].forEach((key) => {
+    const value = req[key];
+    if (value && typeof value === 'object') {
+      sanitize(value);
+    }
+  });
+
+  // req.query is a getter-only accessor in Express 5 that re-parses the URL on
+  // every read, so in-place sanitization would be thrown away. Shadow the
+  // getter with a sanitized own copy instead (the getter is configurable).
+  const query = req.query;
+  if (query && typeof query === 'object') {
+    sanitize(query);
+    Object.defineProperty(req, 'query', {
+      value: query,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  next();
+});
 
 // Global rate limiting
 const limiter = rateLimit({
