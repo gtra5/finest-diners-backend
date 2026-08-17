@@ -31,7 +31,7 @@ const createOrder = [
     .withMessage('Item quantity must be at least 1'),
   body('paymentMethod')
     .optional()
-    .isIn(['card', 'cash'])
+    .isIn(['card', 'applepay', 'cod'])
     .withMessage('Invalid payment method'),
   body('notes')
     .optional()
