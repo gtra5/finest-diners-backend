@@ -9,7 +9,7 @@ const { getDeliveryETA } = require('../services/osrmService');
 const ACTIVE_STATUSES = ['pending', 'confirmed', 'preparing', 'out_for_delivery'];
 
 // Never trust a client's own throttling — enforce a floor here regardless
-// of how often the customer's browser fires watchPosition callbacks.
+// of how often the driver's browser fires watchPosition callbacks.
 const MIN_UPDATE_INTERVAL_MS = 2000;
 
 const roomFor = (orderId) => `order:${orderId}`;
@@ -42,7 +42,7 @@ module.exports = function attachOrderTracking(io) {
     // Set on a successful join, so location:update doesn't need a DB round
     // trip on every single tick — just a cheap in-memory check.
     socket.data.authorizedOrderId = null;
-    socket.data.isCustomerForOrder = false;
+    socket.data.isDriverForOrder = false;
     socket.data.lastUpdateAt = 0;
 
     socket.on('join_order_room', async ({ orderId } = {}) => {
@@ -69,11 +69,11 @@ module.exports = function attachOrderTracking(io) {
 
         socket.join(roomFor(order._id));
         socket.data.authorizedOrderId = order._id.toString();
-        socket.data.isCustomerForOrder = isOwner && socket.user.role === 'customer';
+        socket.data.isDriverForOrder = isAssignedDriver;
 
-        // Whoever just joined (typically a driver opening the tracking
-        // screen mid-delivery) gets the last known point immediately,
-        // instead of waiting for the customer's next tick.
+        // Whoever just joined (typically a customer opening the tracking
+        // screen mid-delivery) gets the driver's last known point immediately,
+        // instead of waiting for the next location:update tick.
         if (order.latitude != null && order.longitude != null) {
           socket.emit('location:current', {
             orderId: order._id.toString(),
@@ -88,9 +88,10 @@ module.exports = function attachOrderTracking(io) {
     });
 
     socket.on('location:update', async ({ orderId, latitude, longitude } = {}) => {
-      // Only the authenticated customer who owns this order, and only after
-      // a successful join for this same order, may push a location.
-      if (!socket.data.isCustomerForOrder || socket.data.authorizedOrderId !== orderId) {
+      // Only the ASSIGNED DRIVER of this order, and only after a successful
+      // join for this same order, may push a location. The customer and any
+      // admin can only ever receive updates, never send them.
+      if (!socket.data.isDriverForOrder || socket.data.authorizedOrderId !== orderId) {
         return socket.emit('tracking:error', { message: 'Not authorized to update this order' });
       }
 
@@ -134,7 +135,7 @@ module.exports = function attachOrderTracking(io) {
       if (orderId) socket.leave(roomFor(orderId));
       if (socket.data.authorizedOrderId === orderId) {
         socket.data.authorizedOrderId = null;
-        socket.data.isCustomerForOrder = false;
+        socket.data.isDriverForOrder = false;
       }
     });
   });
