@@ -139,6 +139,9 @@ const orderRoutes = require("./routes/orderRoutes");
 const restaurantRoutes = require("./routes/restaurantRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const locationRoutes = require("./routes/locationRoutes");
+const complaintRoutes = require("./routes/complaintRoutes");
+const userRoutes = require("./routes/userRoutes");
+const statsRoutes = require("./routes/statsRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/food", foodRoutes);
@@ -146,6 +149,9 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/restaurants", restaurantRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/location", locationRoutes);
+app.use("/api/complaints", complaintRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/stats", statsRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {

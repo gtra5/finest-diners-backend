@@ -171,14 +171,54 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
-// @desc    Get all orders (admin view)
+// @desc    Confirm order receipt by customer
+// @route   PUT /api/orders/:id/confirm-receipt
+// @access  Private (customer)
+const confirmOrderReceipt = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    // Only the customer who owns the order can confirm receipt
+    if (order.customer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to confirm this order' });
+    }
+
+    // Only allow confirmation for delivered orders
+    if (order.status !== 'delivered') {
+      return res.status(400).json({ message: 'Order must be delivered before confirming receipt' });
+    }
+
+    order.status = 'received';
+    order.confirmedReceivedAt = new Date();
+    await order.save();
+
+    // Notify tracking room that order is received
+    const io = req.app.get('io');
+    if (io) {
+      const room = `order:${order._id}`;
+      io.to(room).emit('tracking:ended', { orderId: order._id.toString(), status: 'received' });
+      io.in(room).socketsLeave(room);
+    }
+
+    res.json({ message: 'Order receipt confirmed', order });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get all orders (admin/manager/employee view)
 // @route   GET /api/orders
-// @access  Private (admin)
+// @access  Private (admin, manager, employee)
 const getAllOrders = async (req, res) => {
   try {
     const orders = await Order.find()
       .populate('restaurant', 'name')
       .populate('customer', 'name email')
+      .populate('driver', 'name phone')
       .sort({ createdAt: -1 });
     res.json(orders);
   } catch (error) {
@@ -186,4 +226,104 @@ const getAllOrders = async (req, res) => {
   }
 };
 
-module.exports = { createOrder, getMyOrders, getOrderById, updateOrderStatus, getAllOrders };
+// @desc    Get orders assigned to the logged-in driver
+// @route   GET /api/orders/driver/my-orders
+// @access  Private (driver)
+const getDriverOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      driver: req.user._id,
+      status: { $nin: ['received', 'cancelled'] },
+    })
+      .populate('restaurant', 'name imageUrl address')
+      .populate('customer', 'name phone')
+      .sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get orders with no driver assigned (available for claiming)
+// @route   GET /api/orders/driver/available
+// @access  Private (driver)
+const getAvailableOrders = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      driver: null,
+      status: { $in: ['confirmed', 'preparing'] },
+    })
+      .populate('restaurant', 'name imageUrl address')
+      .populate('customer', 'name')
+      .sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Assign a driver to an order
+// @route   PUT /api/orders/:id/assign
+// @access  Private (admin, manager)
+const assignDriver = async (req, res) => {
+  try {
+    const { driverId } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (!driverId) {
+      return res.status(400).json({ message: 'Driver ID is required' });
+    }
+
+    order.driver = driverId;
+    await order.save();
+
+    const populated = await order.populate('driver', 'name phone');
+
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Driver claims an unassigned order
+// @route   PUT /api/orders/:id/claim
+// @access  Private (driver)
+const claimOrder = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    if (order.driver) {
+      return res.status(400).json({ message: 'Order already has a driver assigned' });
+    }
+
+    order.driver = req.user._id;
+    await order.save();
+
+    const populated = await order.populate('driver', 'name phone');
+
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = {
+  createOrder,
+  getMyOrders,
+  getOrderById,
+  updateOrderStatus,
+  confirmOrderReceipt,
+  getAllOrders,
+  getDriverOrders,
+  getAvailableOrders,
+  assignDriver,
+  claimOrder,
+};
