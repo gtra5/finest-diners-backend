@@ -1,4 +1,6 @@
 const Order = require('../models/Order');
+const Food = require('../models/Food');
+const User = require('../models/User');
 const { body, validationResult } = require('express-validator');
 
 // @desc    Place a new order
@@ -48,14 +50,29 @@ const createOrder = [
 
       const { restaurant, items, deliveryAddress, paymentMethod, notes, latitude, longitude } = req.body;
 
+      // Load authoritative prices from the Food collection. The client sends
+      // item.food (spoonacularId) but price is NEVER trusted — it's derived
+      // from the database so items can't be undercharged.
+      const itemIds = items.map((i) => i.food);
+      const foodDocs = await Food.find({ spoonacularId: { $in: itemIds } });
+      const priceByFoodId = new Map(foodDocs.map((f) => [String(f.spoonacularId), f.price]));
+
       // Whitelist item fields — never trust arbitrary client data
-      const sanitisedItems = items.map((item) => ({
-        food:     item.food,
-        name:     String(item.name || '').slice(0, 120),
-        price:    Math.abs(parseFloat(item.price) || 0),
-        quantity: Math.max(1, parseInt(item.quantity, 10) || 1),
-        imageUrl: String(item.imageUrl || '').slice(0, 500),
-      }));
+      const sanitisedItems = items.map((item) => {
+        const dbPrice = priceByFoodId.get(String(item.food));
+        if (dbPrice === undefined) {
+          const err = new Error('One or more items are not on the menu');
+          err.status = 400;
+          throw err;
+        }
+        return {
+          food:     item.food,
+          name:     String(item.name || '').slice(0, 120),
+          price:    dbPrice,
+          quantity: Math.max(1, parseInt(item.quantity, 10) || 1),
+          imageUrl: String(item.imageUrl || '').slice(0, 500),
+        };
+      });
 
       const totalPrice = sanitisedItems.reduce(
         (sum, item) => sum + item.price * item.quantity, 0
@@ -90,7 +107,8 @@ const createOrder = [
       res.status(201).json(order);
     } catch (error) {
       console.error('Order creation error:', error);
-      res.status(500).json({ message: error.message || 'Failed to create order' });
+      const status = error.status || 500;
+      res.status(status).json({ message: error.message || 'Failed to create order' });
     }
   }
 ];
@@ -123,11 +141,18 @@ const getOrderById = async (req, res) => {
       return res.status(404).json({ message: 'Order not found' });
     }
 
-    // Customers can only see their own orders; admins and drivers can see all
-    if (
-      req.user.role === 'customer' &&
-      order.customer._id.toString() !== req.user._id.toString()
-    ) {
+    // Customers can only see their own orders; drivers can only see orders
+    // assigned to them; admin/manager may see all. Employees are restricted
+    // to the aggregate list view (getAllOrders) to limit PII exposure.
+    if (req.user.role === 'customer') {
+      if (order.customer._id.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Not authorized' });
+      }
+    } else if (req.user.role === 'driver') {
+      if (!order.driver || order.driver._id.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Not authorized' });
+      }
+    } else if (req.user.role === 'employee') {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
@@ -143,14 +168,45 @@ const getOrderById = async (req, res) => {
 const updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
-    const order = await Order.findById(req.params.id);
 
+    // Allowed status transitions by role. Drivers may only advance their own
+    // assigned order along the delivery path; never jump to 'delivered/paid'
+    // from 'pending/confirmed', and never mark a non-COD order paid.
+    const validTransitions = {
+      pending:          ['confirmed', 'cancelled'],
+      confirmed:        ['preparing', 'cancelled'],
+      preparing:        ['out_for_delivery', 'cancelled'],
+      out_for_delivery: ['delivered', 'cancelled'],
+      delivered:        ['received'],
+      received:         [],
+      cancelled:        [],
+    };
+
+    const order = await Order.findById(req.params.id);
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
 
+    // Drivers may only update orders assigned to them
+    if (req.user.role === 'driver' && order.driver?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to update this order' });
+    }
+
+    // Reject unknown or disallowed transitions
+    const allowed = validTransitions[order.status] || [];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({
+        message: `Cannot change order from '${order.status}' to '${status}'`,
+      });
+    }
+
     order.status = status;
-    if (status === 'delivered') order.isPaid = true;
+
+    // Only mark as paid for COD orders — card/applepay orders are marked paid
+    // via the Paystack verification flow. Never auto-pay for unpaid card orders.
+    if (status === 'delivered' && order.paymentMethod === 'cod') {
+      order.isPaid = true;
+    }
     await order.save();
 
     // Live tracking only makes sense while an order is active — once it's
@@ -276,6 +332,12 @@ const assignDriver = async (req, res) => {
 
     if (!driverId) {
       return res.status(400).json({ message: 'Driver ID is required' });
+    }
+
+    // The assigned user must actually be a driver
+    const driver = await User.findById(driverId);
+    if (!driver || driver.role !== 'driver') {
+      return res.status(400).json({ message: 'Assigned user is not a driver' });
     }
 
     order.driver = driverId;

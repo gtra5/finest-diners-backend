@@ -8,13 +8,11 @@ const { body, validationResult, param } = require('express-validator');
  * @access  Private (customer)
  */
 const initializePayment = [
-  // Validation
+  // Validation — note: amount is NOT accepted from the client; the server
+  // reads the order total directly from the database to prevent price-tampering.
   body('orderId')
     .notEmpty()
     .withMessage('Order ID is required'),
-  body('amount')
-    .isFloat({ min: 0.01 })
-    .withMessage('Amount must be a positive number'),
   body('email')
     .trim()
     .isEmail()
@@ -28,13 +26,22 @@ const initializePayment = [
         return res.status(400).json({ message: errors.array()[0].msg });
       }
 
-      const { orderId, amount, email } = req.body;
+      const { orderId, email } = req.body;
 
-      // Generate unique reference
+      // Load the order to get the server-side authoritative price
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ message: 'Order not found' });
+      }
+
+      // Only the customer who owns the order may initiate payment
+      if (order.customer.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Not authorized to pay for this order' });
+      }
+
+      // Use the server-computed totalPrice — never trust a client-supplied amount
       const reference = generateReference();
-
-      // Convert amount to kobo (Paystack expects amount in smallest currency unit)
-      const amountInKobo = Math.round(amount * 100);
+      const amountInKobo = Math.round(order.totalPrice * 100);
 
       // Initialize transaction with Paystack
       const paymentData = {
@@ -106,6 +113,18 @@ const verifyPayment = [
       // Verify the order belongs to the user
       if (order.customer.toString() !== userId.toString()) {
         return res.status(403).json({ message: 'Not authorized to verify this payment' });
+      }
+
+      // Reconcile: the amount Paystack actually collected must equal the
+      // order's current total (both in kobo). Blocks payment-tampering where
+      // a smaller amount is paid for a larger order.
+      const paidKobo = Number(response.data.amount);
+      const expectedKobo = Math.round(order.totalPrice * 100);
+      if (!Number.isFinite(paidKobo) || paidKobo !== expectedKobo) {
+        return res.status(400).json({
+          success: false,
+          message: 'Payment amount does not match order total',
+        });
       }
 
       // Update order payment status
