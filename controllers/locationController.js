@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { query, validationResult } = require('express-validator');
+const { calculateRoute } = require('../services/osrmService');
 
 const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
 
@@ -95,6 +96,66 @@ const getAddressFromCoords = [
   }
 ];
 
+/**
+ * @desc    Calculate ETA and distance between two coordinates using OSRM
+ * @route   GET /api/location/route?fromLat=..&fromLng=..&toLat=..&toLng=..
+ * @access  Private
+ */
+const calculateETA = [
+  // Validation
+  query('fromLat')
+    .notEmpty()
+    .withMessage('From latitude is required')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('From latitude must be between -90 and 90'),
+  query('fromLng')
+    .notEmpty()
+    .withMessage('From longitude is required')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('From longitude must be between -180 and 180'),
+  query('toLat')
+    .notEmpty()
+    .withMessage('To latitude is required')
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('To latitude must be between -90 and 90'),
+  query('toLng')
+    .notEmpty()
+    .withMessage('To longitude is required')
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('To longitude must be between -180 and 180'),
+
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg });
+      }
+
+      const { fromLat, fromLng, toLat, toLng } = req.query;
+
+      const route = await calculateRoute(
+        Number(fromLat),
+        Number(fromLng),
+        Number(toLat),
+        Number(toLng)
+      );
+
+      res.json({
+        duration: route.duration,
+        distance: route.distance,
+        durationMinutes: route.durationMinutes,
+        distanceKm: route.distanceKm,
+      });
+    } catch (error) {
+      console.error('Route calculation error:', error.message);
+      res.status(500).json({
+        message: error.message || 'Failed to calculate route',
+      });
+    }
+  }
+];
+
 module.exports = {
   getAddressFromCoords,
+  calculateETA,
 };

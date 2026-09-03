@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Order = require('../models/Order');
+const { getDeliveryETA } = require('../services/osrmService');
 
 // Orders can only be tracked live while in one of these states — matches
 // the lifecycle in models/Order.js. Once an order is delivered/cancelled,
@@ -102,7 +103,7 @@ module.exports = function attachOrderTracking(io) {
       socket.data.lastUpdateAt = now;
 
       try {
-        const order = await Order.findById(orderId).select('status latitude longitude');
+        const order = await Order.findById(orderId).select('status latitude longitude deliveryCoordinates');
         if (!order || !ACTIVE_STATUSES.includes(order.status)) return;
 
         order.latitude = lat;
@@ -110,11 +111,19 @@ module.exports = function attachOrderTracking(io) {
         order.locationUpdatedAt = new Date();
         await order.save();
 
+        // Calculate ETA if OSRM is configured and order has delivery coordinates
+        let eta = null;
+        if (order.deliveryCoordinates && order.deliveryCoordinates.latitude && order.deliveryCoordinates.longitude) {
+          eta = await getDeliveryETA(lat, lng, order.deliveryCoordinates.latitude, order.deliveryCoordinates.longitude);
+        }
+
         io.to(roomFor(orderId)).emit('location:update', {
           orderId,
           latitude: lat,
           longitude: lng,
           updatedAt: order.locationUpdatedAt,
+          eta: eta ? eta.etaMinutes : null,
+          distance: eta ? eta.distanceKm : null,
         });
       } catch {
         // A dropped tick isn't worth surfacing to the UI — the next one will land.

@@ -78,6 +78,10 @@ const createOrder = [
         if (!isNaN(lat) && !isNaN(lng)) {
           orderData.latitude = lat;
           orderData.longitude = lng;
+          orderData.deliveryCoordinates = {
+            latitude: lat,
+            longitude: lng,
+          };
         }
       }
 

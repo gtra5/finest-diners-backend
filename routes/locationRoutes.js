@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-const { getAddressFromCoords } = require('../controllers/locationController');
+const { getAddressFromCoords, calculateETA } = require('../controllers/locationController');
 
 // Rate limiting for location API calls (external API dependency)
 const locationLimiter = rateLimit({
@@ -14,5 +14,8 @@ const locationLimiter = rateLimit({
 
 // Reverse-geocode GPS coordinates (from the browser) into a readable address
 router.get('/reverse', locationLimiter, getAddressFromCoords);
+
+// Calculate ETA and distance between two coordinates using OSRM
+router.get('/route', calculateETA);
 
 module.exports = router;

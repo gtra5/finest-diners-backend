@@ -19,6 +19,11 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
+// OSRM is optional - if not set, ETA will not be available
+if (!process.env.OSRM_URL) {
+  console.warn("⚠️  OSRM_URL not set. ETA calculations will be disabled.");
+}
+
 if (process.env.JWT_SECRET.length < 32) {
   console.error(
     "❌ JWT_SECRET is too short. Use at least 32 random characters.",

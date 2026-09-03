@@ -33,6 +33,16 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    deliveryCoordinates: {
+      latitude: {
+        type: Number,
+        default: null,
+      },
+      longitude: {
+        type: Number,
+        default: null,
+      },
+    },
     totalPrice: {
       type: Number,
       required: true,
