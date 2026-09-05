@@ -145,6 +145,7 @@ const locationRoutes = require("./routes/locationRoutes");
 const complaintRoutes = require("./routes/complaintRoutes");
 const userRoutes = require("./routes/userRoutes");
 const statsRoutes = require("./routes/statsRoutes");
+const dispatchRoutes = require("./routes/dispatchRoutes");
 
 app.use("/api/auth", authRoutes);
 app.use("/api/food", foodRoutes);
@@ -155,6 +156,7 @@ app.use("/api/location", locationRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/stats", statsRoutes);
+app.use("/api/dispatch", dispatchRoutes);
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
