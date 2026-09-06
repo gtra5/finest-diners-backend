@@ -44,11 +44,14 @@ const initializePayment = [
       const amountInKobo = Math.round(order.totalPrice * 100);
 
       // Initialize transaction with Paystack
+      // callback_url uses the calling frontend's origin so it works whether the
+      // request comes from the local dev server or the deployed customer app.
+      const paymentOrigin = req.get('origin') || process.env.ALLOWED_ORIGINS.split(',')[0].trim();
       const paymentData = {
         amount: amountInKobo,
         email,
         reference,
-        callback_url: `${process.env.ALLOWED_ORIGINS}/payment/callback`,
+        callback_url: `${paymentOrigin}/payment/callback`,
         metadata: {
           orderId,
           userId: req.user._id,

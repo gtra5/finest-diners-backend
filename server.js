@@ -46,7 +46,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       "https://finest-diners-2-622i.vercel.app",
       "http://localhost:5174",
       "http://localhost:5175",
-      "http://localhost:5176"
+      "http://localhost:5176",
+      "http://localhost:5177",
     ];
 
 const corsOriginCheck = (origin, callback) => {

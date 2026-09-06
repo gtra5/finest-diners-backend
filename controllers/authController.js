@@ -78,7 +78,10 @@ const login = [
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email'),
+  // Trim so accidental leading/trailing spaces (e.g. mobile autocorrect)
+  // don't reject a password the user typed correctly.
   body('password')
+    .trim()
     .notEmpty()
     .withMessage('Password is required'),
 
@@ -94,6 +97,11 @@ const login = [
       // Explicitly select password since it's excluded by default
       const user = await User.findOne({ email }).select('+password');
       if (!user || !(await user.matchPassword(password))) {
+        // Diagnostic: log failed attempts so we can see exactly which email/password
+        // combination the client sends (password is never logged).
+        console.warn(
+          `[login] FAILED email=${JSON.stringify(email)} userExists=${!!user} passwordLength=${password ? password.length : 0}`
+        );
         return res.status(401).json({ message: 'Invalid email or password' });
       }
 

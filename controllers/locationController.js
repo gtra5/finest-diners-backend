@@ -5,6 +5,51 @@ const { calculateRoute } = require('../services/osrmService');
 const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
 
 /**
+ * @desc    Approximate location from the request IP. Used as a fast fallback
+ *          when the browser's GPS is unavailable/blocked (mobile apps, denied
+ *          permission, no GPS). Accuracy is city-level − the frontend renders
+ *          this as "approximate" and still lets the user refresh for GPS.
+ * @route   GET /api/location/ip
+ * @access  Public
+ */
+const getIpLocation = async (req, res) => {
+  try {
+    // Try providers in order; each fails fast (~3.5s) so the frontend never waits long.
+    const sources = [
+      async () => {
+        const { data } = await axios.get('https://ipwho.is/', { timeout: 3500 });
+        if (!data || data.success === false) throw new Error('ipwho.is failed');
+        return { latitude: Number(data.latitude), longitude: Number(data.longitude), city: data.city || null };
+      },
+      async () => {
+        const { data } = await axios.get('http://ip-api.com/json/', { timeout: 3500 });
+        if (!data || data.status !== 'success') throw new Error('ip-api failed');
+        return { latitude: Number(data.lat), longitude: Number(data.lon), city: data.city || null };
+      },
+    ];
+
+    let location = null;
+    for (const source of sources) {
+      try {
+        location = await source();
+        break;
+      } catch (err) {
+        console.warn('[ipLocation]', err.message);
+      }
+    }
+
+    if (!location) {
+      return res.status(502).json({ message: 'IP location service unavailable' });
+    }
+
+    res.json({ ...location, source: 'ip' });
+  } catch (error) {
+    console.error('IP location error:', error.message);
+    res.status(500).json({ message: 'Failed to locate by IP' });
+  }
+};
+
+/**
  * @desc    Turn GPS coordinates (from the browser's Geolocation API) into a
  *          readable address. Replaces the old IP-based lookup — IP geolocation
  *          is frequently wrong by tens of kilometres, especially outside the
@@ -158,4 +203,5 @@ const calculateETA = [
 module.exports = {
   getAddressFromCoords,
   calculateETA,
+  getIpLocation,
 };
