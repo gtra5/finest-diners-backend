@@ -19,12 +19,24 @@ const getIpLocation = async (req, res) => {
       async () => {
         const { data } = await axios.get('https://ipwho.is/', { timeout: 3500 });
         if (!data || data.success === false) throw new Error('ipwho.is failed');
-        return { latitude: Number(data.latitude), longitude: Number(data.longitude), city: data.city || null };
+        return {
+          latitude: Number(data.latitude),
+          longitude: Number(data.longitude),
+          city: data.city || null,
+          country: data.country || null,
+          countryCode: data.country_code || null
+        };
       },
       async () => {
         const { data } = await axios.get('http://ip-api.com/json/', { timeout: 3500 });
         if (!data || data.status !== 'success') throw new Error('ip-api failed');
-        return { latitude: Number(data.lat), longitude: Number(data.lon), city: data.city || null };
+        return {
+          latitude: Number(data.lat),
+          longitude: Number(data.lon),
+          city: data.city || null,
+          country: data.country || null,
+          countryCode: data.countryCode || null
+        };
       },
     ];
 
@@ -40,6 +52,19 @@ const getIpLocation = async (req, res) => {
 
     if (!location) {
       return res.status(502).json({ message: 'IP location service unavailable' });
+    }
+
+    // Validate that location is within Nigeria
+    const country = location.country || '';
+    const countryCode = location.countryCode || '';
+
+    const isNigeria = country.toLowerCase().includes('nigeria') ||
+                     countryCode.toLowerCase() === 'ng';
+
+    if (!isNigeria) {
+      return res.status(403).json({
+        message: 'Service is not available for this country'
+      });
     }
 
     res.json({ ...location, source: 'ip' });
@@ -104,6 +129,19 @@ const getAddressFromCoords = [
       }
 
       const c = result.components || {};
+
+      // Validate that location is within Nigeria
+      const country = c.country || '';
+      const countryCode = c.country_code || '';
+
+      const isNigeria = country.toLowerCase().includes('nigeria') ||
+                       countryCode.toLowerCase() === 'ng';
+
+      if (!isNigeria) {
+        return res.status(403).json({
+          message: 'Service is not available for this country'
+        });
+      }
 
       // Sanitize response data to prevent XSS
       const sanitizeString = (str) => str ? String(str).replace(/[<>]/g, '') : null;
