@@ -125,6 +125,8 @@ const getAddressFromCoords = [
       const latitude = Number(lat);
       const longitude = Number(lng);
 
+      console.log('[Reverse Geocode] Request for coordinates:', { latitude, longitude });
+
       if (!OPENCAGE_KEY) {
         console.error('OPENCAGE_API_KEY is not set');
         return res.status(500).json({ message: 'Location service is not configured' });
@@ -147,6 +149,13 @@ const getAddressFromCoords = [
       }
 
       const c = result.components || {};
+      console.log('[Reverse Geocode] OpenCage result:', {
+        formatted: result.formatted,
+        country: c.country,
+        countryCode: c.country_code,
+        city: c.city,
+        state: c.state,
+      });
 
       // Validate that location is within Nigeria
       const country = c.country || '';
