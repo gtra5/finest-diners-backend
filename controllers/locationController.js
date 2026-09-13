@@ -14,12 +14,14 @@ const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
  */
 const getIpLocation = async (req, res) => {
   try {
-    // req.ip only reflects the real visitor once `trust proxy` is set in
-    // server.js — otherwise every request looks like it comes from the
-    // reverse proxy. Without passing this IP explicitly below, ipwho.is and
-    // ip-api.com fall back to geolocating whoever is making the HTTP
-    // request — this Node server itself, not the end user.
-    const clientIp = (req.ip || '').replace(/^::ffff:/, '');
+    // Render's onrender.com domains sit behind Cloudflare, so req.ip (even
+    // with trust proxy configured correctly) was landing on Cloudflare's own
+    // edge address — not the visitor's. Cloudflare always sets
+    // CF-Connecting-IP to the real original client IP as a single value, and
+    // since all traffic to this origin passes through Cloudflare, it's safe
+    // to trust directly. Fall back to req.ip for any request that somehow
+    // arrives without it (e.g. local development).
+    const clientIp = (req.headers['cf-connecting-ip'] || req.ip || '').replace(/^::ffff:/, '');
     const isPrivateOrLocal =
       !clientIp || clientIp === '::1' || clientIp.startsWith('127.') || clientIp.startsWith('10.') ||
       clientIp.startsWith('192.168.');
@@ -69,19 +71,6 @@ const getIpLocation = async (req, res) => {
     if (!location) {
       return res.status(502).json({ message: 'IP location service unavailable' });
     }
-
-    // TEMP DIAGNOSTIC — remove once the Nigeria-eligibility check is confirmed
-    // accurate. Shows exactly what the resolved IP/city/country were for this
-    // request, so we can tell a genuinely-foreign IP apart from a GeoIP
-    // misclassification.
-    console.log('[ipLocation] resolved:', {
-      clientIp,
-      city: location.city,
-      country: location.country,
-      countryCode: location.countryCode,
-      latitude: location.latitude,
-      longitude: location.longitude,
-    });
 
     // Validate that location is within Nigeria
     const country = location.country || '';
