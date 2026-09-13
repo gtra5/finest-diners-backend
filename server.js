@@ -33,6 +33,12 @@ if (process.env.JWT_SECRET.length < 32) {
 
 const app = express();
 
+// Render/Vercel put the app behind one reverse-proxy hop, so without this,
+// req.ip is the proxy's address for every request — not the visitor's. That
+// breaks IP-based geolocation (location/ip) and makes express-rate-limit key
+// every visitor as the same client.
+app.set('trust proxy', 1);
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 const normalizeOrigin = (origin) => origin.replace(/\/$/, "");
 const isVercelPreviewOrigin = (origin) => /\.vercel\.app$/i.test(origin);

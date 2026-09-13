@@ -16,16 +16,16 @@ const seed = async () => {
   await User.deleteMany({ role: { $in: ['admin', 'manager'] } });
 
   const restaurant = await Restaurant.create({
-    name: 'Finest Diners',
+    name: 'All menu',
     description: 'Premium food delivered straight to your door. Fresh ingredients, bold flavours.',
     cuisine: 'International',
     address: '1 Finest Street, Lagos, Nigeria',
-    phone: '+234 800 000 0000',
+    phone: '+234 901 800 6888',
     imageUrl: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80',
     rating: 4.8,
     deliveryTime: '25-40 min',
     isOpen: true,
-    spoonacularQuery: 'chicken,pasta,burger,pizza,rice',
+    spoonacularQuery: 'chicken,pasta,burger,pizza,rice,seafood, dessert, salad, soup, sandwich, steak, sushi, tacos',
   });
 
   console.log(`🍽️  Restaurant seeded — ID: ${restaurant._id}`);

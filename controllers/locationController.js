@@ -14,10 +14,26 @@ const OPENCAGE_KEY = process.env.OPENCAGE_API_KEY;
  */
 const getIpLocation = async (req, res) => {
   try {
+    // req.ip only reflects the real visitor once `trust proxy` is set in
+    // server.js — otherwise every request looks like it comes from the
+    // reverse proxy. Without passing this IP explicitly below, ipwho.is and
+    // ip-api.com fall back to geolocating whoever is making the HTTP
+    // request — this Node server itself, not the end user.
+    const clientIp = (req.ip || '').replace(/^::ffff:/, '');
+    const isPrivateOrLocal =
+      !clientIp || clientIp === '::1' || clientIp.startsWith('127.') || clientIp.startsWith('10.') ||
+      clientIp.startsWith('192.168.');
+
+    if (isPrivateOrLocal) {
+      return res.status(400).json({
+        message: 'Cannot determine location for a local/private IP address (this is expected in local development).',
+      });
+    }
+
     // Try providers in order; each fails fast (~3.5s) so the frontend never waits long.
     const sources = [
       async () => {
-        const { data } = await axios.get('https://ipwho.is/', { timeout: 3500 });
+        const { data } = await axios.get(`https://ipwho.is/${clientIp}`, { timeout: 3500 });
         if (!data || data.success === false) throw new Error('ipwho.is failed');
         return {
           latitude: Number(data.latitude),
@@ -28,7 +44,7 @@ const getIpLocation = async (req, res) => {
         };
       },
       async () => {
-        const { data } = await axios.get('http://ip-api.com/json/', { timeout: 3500 });
+        const { data } = await axios.get(`http://ip-api.com/json/${clientIp}`, { timeout: 3500 });
         if (!data || data.status !== 'success') throw new Error('ip-api failed');
         return {
           latitude: Number(data.lat),
