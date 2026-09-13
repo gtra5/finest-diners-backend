@@ -33,11 +33,16 @@ if (process.env.JWT_SECRET.length < 32) {
 
 const app = express();
 
-// Render/Vercel put the app behind one reverse-proxy hop, so without this,
-// req.ip is the proxy's address for every request — not the visitor's. That
-// breaks IP-based geolocation (location/ip) and makes express-rate-limit key
-// every visitor as the same client.
-app.set('trust proxy', 1);
+// Render/Vercel put the app behind reverse-proxy infrastructure, and the
+// exact number of internal hops isn't guaranteed or documented — a fixed
+// `trust proxy: 1` can still leave req.ip pointing at an internal Render
+// address (which is why /api/location/ip was 400ing "private/local IP" even
+// for real visitors). Trusting Express's built-in private-range presets
+// instead skips any number of internal hops automatically and stops at the
+// first public address in the chain — that's the real client, and it can't
+// be spoofed by a client-supplied X-Forwarded-For since only ranges reserved
+// for private/internal use are trusted.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 const normalizeOrigin = (origin) => origin.replace(/\/$/, "");
