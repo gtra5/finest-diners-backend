@@ -70,6 +70,19 @@ const getIpLocation = async (req, res) => {
       return res.status(502).json({ message: 'IP location service unavailable' });
     }
 
+    // TEMP DIAGNOSTIC — remove once the Nigeria-eligibility check is confirmed
+    // accurate. Shows exactly what the resolved IP/city/country were for this
+    // request, so we can tell a genuinely-foreign IP apart from a GeoIP
+    // misclassification.
+    console.log('[ipLocation] resolved:', {
+      clientIp,
+      city: location.city,
+      country: location.country,
+      countryCode: location.countryCode,
+      latitude: location.latitude,
+      longitude: location.longitude,
+    });
+
     // Validate that location is within Nigeria
     const country = location.country || '';
     const countryCode = location.countryCode || '';
